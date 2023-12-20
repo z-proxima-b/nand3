@@ -37,6 +37,7 @@ class CodeWriter
             raise ArgumentError, "Unknown arithmetic command #{cmd}." 
           end
     asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
+
   end
 
   # Given a vm stack operation, write the corresponding assembler instructions
