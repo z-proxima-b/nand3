@@ -25,6 +25,8 @@ module Asm
       ["// push #{args}"]
     when :pop
       ["// pop #{args}"]
+    when :function
+      ["// function #{args}"]
     end
   end
 
@@ -58,10 +60,16 @@ module Asm
     ["@SP", "A=M", "M=D", incrementSP].flatten
   end
 
+
+  def self.copy_stack_top_to_D_register
+    ["@SP", "A=M", "D=M"]
+  end
+
+
   # Assembler instructions to pop stack top to 
   # D register. NB - will always decrement the SP
   def self.pop_stack_top_to_D_register
-    [decrementSP, "@SP", "A=M", "D=M"].flatten
+    [decrementSP, copy_stack_top_to_D_register].flatten
   end
 
 
@@ -130,7 +138,7 @@ module Asm
   # Returns assembler instructions for pushing a value from a 
   # particular seg segment, onto the top of the stack. 
   # NB: Changes the Stack Pointer.
-  def self.stack_push(seg, offs)
+  def self.push(seg, offs)
     asm = []
 
     asm << write_comment(:push, seg, offs)
@@ -159,7 +167,7 @@ module Asm
   # the top of the stack, and writing it to a specific location
   # in the given seg segment.
   # NB: Changes the Stack Pointer.
-  def self.stack_pop(seg, offs)
+  def self.pop(seg, offs)
     raise ArgumentError, "#{seg} is unwriteable" unless writeable? (seg)
     tempvar = "R13"
     asm = [
@@ -234,5 +242,68 @@ module Asm
      incrementSP]                       # restore the SP 
     .flatten                            # flatten to  single layer and return 
   end
+
+  # Insert the given name as a label into the assembler command stream
+  def self.label(name)
+    ["(#{name})"].flatten
+  end
+
+  # Add assembler commands for examining the value at the top of the stack
+  # and then jumping to the given label, if greater than zero
+  def self.if_goto(name)
+    [pop_stack_top_to_D_register,
+     "@#{name}",
+     "D; JGT"].flatten  
+  end
+
+  def self.goto(name)
+    ["@#{name}",
+     "0; JEQ"]
+  end
+
+  def self.function_code(classname, functionname, numlocals) 
+    puts "#{classname} #{functionname} #{numlocals}"
+    asm = []
+    asm << [write_comment(:function, "init locals")]
+    asm << ["D=0", "@LCL", "A=M"]
+    0.upto(numlocals.to_i-1) { 
+      asm << [push_D_register_to_stack]
+    }
+    asm << [write_comment(:function, "finished init locals")] 
+    asm << ["(#{classname}.#{functionname})"]
+    asm.flatten
+  end
+
+  def self.do_return
+    asm = []
+    # FRAME = LCL - save FRAME in a temporary variable
+    asm << [write_comment(:function, "save FRAME to a temp")] 
+    asm << ["@LCL", "D=M", "@R13", "M=D"] 
+    asm << [write_comment(:function, "save return addr to a temp")] 
+    # RET = *(FRAME-5) - store return address in a temp var
+    asm << ["@R13", "D=M", "@5", "A=D-A", "D=M", "@RET", "M=D"]   
+    asm << [write_comment(:function, "put return value into *ARG")] 
+    # *(ARG) = pop() - reposition the return value for the caller
+    asm << [pop_stack_top_to_D_register, "@ARG", "A=M", "M=D"]  
+    # SP = (ARG + 1)
+    asm << [write_comment(:function, "set SP to ARG+1")] 
+    asm << ["@ARG", "D=M", "D=D+1", "@SP", "M=D"]   
+    # THAT = *(FRAME - 1)
+    asm << [write_comment(:function, "set THAT to one above FRAME (LCL)")] 
+    asm << ["@R13", "D=M", "@1", "A=D-A", "D=M", "@THAT", "M=D"]      
+    # THIS = *(FRAME - 2)
+    asm << [write_comment(:function, "set THIS to 2 above FRAME (LCL)")] 
+    asm << ["@R13", "D=M", "@2", "A=D-A", "D=M", "@THIS", "M=D"]      
+    # ARG = *(FRAME - 3)
+    asm << [write_comment(:function, "set ARG to 3 above FRAME (LCL)")] 
+    asm << ["@R13", "D=M", "@3", "A=D-A", "D=M", "@ARG", "M=D"]      
+    # LCL = *(FRAME - 4)
+    asm << [write_comment(:function, "set LCL to 4 above FRAME (LCL)")] 
+    asm << ["@R13", "D=M", "@4", "A=D-A", "D=M", "@LCL", "M=D"]      
+    # goto RET - go to return addr in caller's code
+    asm << [write_comment(:function, "set JUMP to return address ")] 
+    asm << ["@RET", "A=M", "0; JMP"]   
+    asm.flatten
+  end 
 
 end

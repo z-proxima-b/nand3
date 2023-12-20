@@ -43,12 +43,38 @@ class CodeWriter
   # to perform the push or pop operation.
   def write_pushpop(command, segment, value)
     asm = case command
-          when :C_PUSH then Asm.stack_push(segment, value)
-          when :C_POP then Asm.stack_pop(segment, value)
+          when :C_PUSH then Asm.push(segment, value)
+          when :C_POP then Asm.pop(segment, value)
           else raise ArgumentError, "Unknown stack operation."
           end
     asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
   end
+
+  def write_label(name)
+    asm = Asm.label(name) 
+    asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
+  end
+
+  def write_if_goto(name)
+    asm = Asm.if_goto(name) 
+    asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
+  end
+
+  def write_goto(name)
+    asm = Asm.goto(name) 
+    asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
+  end
+
+  def write_function_code(classname, functionname, numlocals)
+    asm = Asm.function_code(classname, functionname, numlocals) 
+    asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
+  end
+
+  def write_return
+    asm = Asm.do_return
+    asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
+  end
+
 
 end
 
