@@ -14,10 +14,12 @@ class Parser
     @filename = stream 
     @writer = writer
     @writer.set_file_name(stream)
-    @data = File.open(stream)
+    @writer.write_bootstrap
   end
 
-  def run
+  def run(fname)
+    puts "parser working on #{fname}"
+    @data = File.open(fname)
     until has_more_commands == false do 
       advance
       puts "command type #{command_type}"
@@ -34,6 +36,8 @@ class Parser
         @writer.write_label(@arg1)
       when :C_FUNCTION 
         @writer.write_function_code(@arg1, @arg2, @arg3)
+      when :C_CALL
+        @writer.write_function_call(@arg1, @arg2, @arg3) 
       when :C_RETURN
         @writer.write_return
       end
@@ -44,7 +48,7 @@ class Parser
     begin
       @words = @data.readline.scan(/[\/\w-]+/)
       p @words
-    rescue EOFError
+    rescue ArgumentError, EOFError
       return false
     end
     true
@@ -95,6 +99,11 @@ class Parser
       @arg1 = words[1]
       @arg2 = words[2]
       @arg3 = words[3]
+    when "call"
+      @type = :C_CALL
+      @arg1 = words[1]
+      @arg2 = words[2]
+      @arg3 = words[3]
     when "return"
       @type = :C_RETURN
     else
@@ -106,13 +115,14 @@ end
 
 code_writer = CodeWriter.new
 stream = ARGV[0]
+parser = Parser.new("#{stream}", code_writer)
 if File.directory?(stream)
   dir = stream
   Dir.children(dir).each do |fname| 
     next if File.extname(fname) != ".vm"  
-    Parser.new("#{dir}/#{fname}", code_writer).run
- end
+    parser.run("#{dir}/#{fname}")
+  end
 else
   puts "creating new parser for #{stream}"
-  Parser.new(stream, code_writer).run
+  parser.run("#{stream}")
 end

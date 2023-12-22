@@ -6,19 +6,18 @@ class CodeWriter
     @label = 0
   end
 
-  # This function takes a "filename.vm" and extracts the basename, i.e. 
-  # the filename without any extension, and also extracts the path.
+  # This function takes a dirname or a filename (single .vm file) 
+  # Removes the ".vm" extension, if present. 
   # It then constructs the name for the resulting .asm file,
   # by concatenating the basename and the path. 
   def set_file_name(filename) 
-    # Raise an error if this is not a file
-    raise ArgumentError, "Expected a file" unless File.file? filename 
-    @fname = File.basename(filename, ".vm")
-    @outfile = "#{File.dirname filename}/#{@fname}.asm"
+    @outfile = "#{File.dirname filename}/#{File.basename(File.dirname filename)}.asm" if File.file? filename  
+    @outfile = "#{filename}/#{File.basename filename}.asm" if File.directory? filename  
+    puts @outfile
 
     # This needs to be accessible to the assembler construction code,
     # so that we can create static variables.
-    Asm.set_file_name(@fname)
+    Asm.set_file_name(@outfile)
 
     # Ensure that the output file does not already exist
     File.delete @outfile if File.exists? @outfile
@@ -66,16 +65,25 @@ class CodeWriter
     asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
   end
 
+  def write_function_call(classname, functionname, nArgs)
+    asm = Asm.function_call(classname, functionname, nArgs) 
+    asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
+  end
+
   def write_function_code(classname, functionname, numlocals)
     asm = Asm.function_code(classname, functionname, numlocals) 
     asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
   end
 
   def write_return
-    asm = Asm.do_return
+    asm = Asm.function_return
     asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
   end
 
+  def write_bootstrap
+    asm = Asm.bootstrap
+    asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
+  end
 
 end
 

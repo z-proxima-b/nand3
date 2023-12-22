@@ -7,6 +7,7 @@ module Asm
                           
 
   @@label = 0
+  @@returns = 0
   @@fname = ""
 
   def self.set_file_name(name)
@@ -17,8 +18,14 @@ module Asm
     @@label = @@label.next
   end
 
+  def self.get_new_return_label
+    @@returns = @@returns.next
+  end
+
   def self.write_comment(type, *args)
     case type
+    when :bootstrap
+      ["// bootstrap"]
     when :arithmetic
       ["//#{args[0]}"]
     when :push
@@ -28,6 +35,23 @@ module Asm
     when :function
       ["// function #{args}"]
     end
+  end
+
+  def self.bootstrap
+    asm = []
+    asm << write_comment(:bootstrap, "SP")
+    asm << ["@256", "D=A", "@SP", "M=D"]
+    asm << write_comment(:bootstrap, "LCL")
+    asm << ["@LCL", "M=-1"]
+    asm << write_comment(:bootstrap, "ARG")
+    asm << ["@ARG", "M=-1"]
+    asm << write_comment(:bootstrap, "THIS")
+    asm << ["@THIS", "M=-1"]
+    asm << write_comment(:bootstrap, "THAT")
+    asm << ["@THAT", "M=-1"]
+    asm << write_comment(:call, "Sys.init")
+    asm << function_call("Sys", "init", 0)
+    asm.flatten
   end
 
 
@@ -264,17 +288,18 @@ module Asm
   def self.function_code(classname, functionname, numlocals) 
     puts "#{classname} #{functionname} #{numlocals}"
     asm = []
+    asm << [write_comment(:function, "entry point")]
+    asm << ["(#{classname}.#{functionname})"] 
     asm << [write_comment(:function, "init locals")]
     asm << ["D=0", "@LCL", "A=M"]
     0.upto(numlocals.to_i-1) { 
       asm << [push_D_register_to_stack]
     }
     asm << [write_comment(:function, "finished init locals")] 
-    asm << ["(#{classname}.#{functionname})"]
     asm.flatten
   end
 
-  def self.do_return
+  def self.function_return
     asm = []
     # FRAME = LCL - save FRAME in a temporary variable
     asm << [write_comment(:function, "save FRAME to a temp")] 
@@ -305,5 +330,62 @@ module Asm
     asm << ["@RET", "A=M", "0; JMP"]   
     asm.flatten
   end 
+
+  def self.push_argument(n)
+    [read_from_segment_and_store_in_D_register("argument", n),
+     push_D_register_to_stack]
+  end
+
+  def self.push_base_address(segment)
+     ["@#{@@segment2mnemonic[segment]}", "D=M",
+      push_D_register_to_stack].flatten   
+  end
+
+  def self.reposition_ARG(nArgs)
+    asm = []
+    asm << ["@5", "D=A", "@nArgs", "D=D+A", "@R14", "M=D"]   
+    asm << ["@ARG", "M=M-D"]  
+    asm.flatten
+  end
+
+  def self.reposition_LCL
+    ["@SP", "D=M", "@LCL", "M=D"]   
+  end
+
+  def self.jump_to_func(classname, funcname)
+    ["@#{classname}.#{funcname}", "0; JMP"]
+  end
+
+  def self.function_call(classname, funcname, nArgs)
+    asm = []
+     
+    # push nArgs to the stack
+    asm << [write_comment(:function, "push nArgs (#{nArgs})")]
+    0.upto(nArgs.to_i-1) { |n| asm << [push_argument(n)] }
+
+    return_addr = "RETURN#{get_new_return_label}"
+
+    # Push return address to the stack (stored in a named variable)
+    asm << [write_comment(:function, "push return address (#{return_addr})")]
+    asm << ["@#{return_addr}", "D=M", push_D_register_to_stack]
+    asm << [write_comment(:function, "push LCL")]
+    asm << [push_base_address("local")]
+    asm << [write_comment(:function, "push ARG")]
+    asm << [push_base_address("argument")]
+    asm << [write_comment(:function, "push THIS")]
+    asm << [push_base_address("this")]
+    asm << [write_comment(:function, "push THAT")]
+    asm << [push_base_address("that")]
+    asm << [write_comment(:function, "reposition ARG")]
+    #ARG = SP-n-5
+    asm << [reposition_ARG(nArgs)]
+    # LCL = SP
+    asm << [reposition_LCL]
+    # goto f
+    asm << [jump_to_func(classname, funcname)]
+    # declare a label for the return address 
+    asm << ["(#{return_addr})"]
+    asm.flatten
+  end
 
 end
