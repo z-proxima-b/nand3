@@ -9,6 +9,7 @@ module Asm
   @@label = 0
   @@returns = 0
   @@fname = ""
+  @@asm = []
 
   def self.set_file_name(name)
     @@fname = name
@@ -18,53 +19,60 @@ module Asm
     @@label = @@label.next
   end
 
-  def self.get_new_return_label
+  def self.next_return_label
     @@returns = @@returns.next
   end
 
-  def self.write_comment(type, *args)
+  def self.comment(*args)
+    ["// #{args}"]
+  end
+  
+  def write_(code, type=:REGULAR)
     case type
-    when :bootstrap
-      ["// bootstrap"]
-    when :arithmetic
-      ["//#{args[0]}"]
-    when :push
-      ["// push #{args}"]
-    when :pop
-      ["// pop #{args}"]
-    when :function
-      ["// function #{args}"]
-    end
+      when :COMMENT
+			@@asm << ["// #{code}"]
+      when :LABEL
+			@@asm << ["(", "#{code}"]
+	  when :REGULAR
+            @@asm << ["\t", "#{code.flatten.join('\n')}"]
+      end 
+
+    case type
+      when :LABEL
+			@@asm << [")"]
+      when :REGULAR
+			@@asm << ["\t\t\t\t\t"]
+      end 
+
+	@@asm << ["\n"]
   end
 
+
   def self.bootstrap
-    asm = []
-    asm << write_comment(:bootstrap, "SP")
-    asm << ["@256", "D=A", "@SP", "M=D"]
-    asm << write_comment(:bootstrap, "LCL")
-    asm << ["@LCL", "M=-1"]
-    asm << write_comment(:bootstrap, "ARG")
-    asm << ["@ARG", "M=-1"]
-    asm << write_comment(:bootstrap, "THIS")
-    asm << ["@THIS", "M=-1"]
-    asm << write_comment(:bootstrap, "THAT")
-    asm << ["@THAT", "M=-1"]
-    asm << write_comment(:call, "Sys.init")
-    asm << function_call("Sys", "init", 0)
-    asm.flatten
+    write_("SP=256", :COMMENT)
+    write_(["@256", "D=A", "@0", "M=D"])
+    write_("Call Sys.init", :COMMENT)
+	write_function_call("Sys.init", 0)
   end
 
 
   # write FALSE to the top of the stack
   def self.write_FALSE_to_stack
-    ["@SP", "A=M", "M=0"]
+    write_("@SP", "A=M", "M=0")
   end
-   
+  
+
   # write TRUE to the top of the stack
   def self.write_TRUE_to_stack
-    ["@SP", "A=M", "M=-1"]
+    write_("@SP", "A=M", "M=-1")
   end
-     
+
+
+  def self.copy_stack_top_to_D_register
+    ["@SP", "A=M", "D=M"]
+  end
+  
+
   # Return an array of assembler instructions for incrementing the stack
   # pointer. 
   def self.incrementSP
@@ -77,30 +85,21 @@ module Asm
     ["@SP","M=M-1"]
   end
 
-
   # Assembler instructions to push contents of register D to 
   # top of the stack. NB - will always increment the SP 
   def self.push_D_register_to_stack
-    ["@SP", "A=M", "M=D", incrementSP].flatten
+    write_("@SP", "A=M", "M=D", incrementSP)
   end
-
-
-  def self.copy_stack_top_to_D_register
-    ["@SP", "A=M", "D=M"]
-  end
-
 
   # Assembler instructions to pop stack top to 
   # D register. NB - will always decrement the SP
   def self.pop_stack_top_to_D_register
-    [decrementSP, copy_stack_top_to_D_register].flatten
+    [decrementSP, copy_stack_top_to_D_register]
   end
-
 
   def self.store_constant_in_D_register(val)
     ["@#{val}", "D=A"] 
   end
-
 
   # Return assembler instruction to set A to the base address 
   # of a particular segment
@@ -114,7 +113,6 @@ module Asm
         ["@#{@@segment2mnemonic[segment]}", "A=M"]   
     end
   end
-
 
   def self.calculate_seg_addr_and_store_in_A_register(seg, offs)
     if seg == "static" 
@@ -163,19 +161,16 @@ module Asm
   # particular seg segment, onto the top of the stack. 
   # NB: Changes the Stack Pointer.
   def self.push(seg, offs)
-    asm = []
-
-    asm << write_comment(:push, seg, offs)
-
+    write_("push #{seg} #{offs}", :COMMENT)
+    
     if seg == 'constant'
-      asm << [store_constant_in_D_register(offs)]
+      write_([store_constant_in_D_register(offs)])
     else
       raise ArgumentError, "#{seg} is unreadable" unless readable? seg
-      asm << [read_from_segment_and_store_in_D_register(seg, offs)] 
+      write_([read_from_segment_and_store_in_D_register(seg, offs)]) 
     end
 
-    asm << [push_D_register_to_stack]
-    asm.flatten
+    write_([push_D_register_to_stack])
   end
 
 
@@ -193,12 +188,10 @@ module Asm
   # NB: Changes the Stack Pointer.
   def self.pop(seg, offs)
     raise ArgumentError, "#{seg} is unwriteable" unless writeable? (seg)
+    write_("pop #{seg} #{offs}", :COMMENT)
     tempvar = "R13"
-    asm = [
-             write_comment(:pop, seg, offs),
-             calculate_seg_addr_and_store_in_temp_var(seg, offs, tempvar),
-             pop_stack_and_write_to_seg_addr(tempvar)
-          ].flatten
+    write_([calculate_seg_addr_and_store_in_temp_var(seg, offs, tempvar),
+              [pop_stack_and_write_to_seg_addr(tempvar)])
   end
   
   def self.do_unary_op_and_push(cmd) 
@@ -246,7 +239,7 @@ module Asm
   # Perform the given operation, on the stack's topmost TWO values.
   # Replace the two values with the (single value) result.
   def self.binary_op(type)
-    [write_comment(:arithmetic, type),
+    [comment(:arithmetic, type),
      pop_stack_top_to_D_register,     # get first operand 
      decrementSP,                     # 
      "A=M",                           # prepare to examine second operand
@@ -259,7 +252,7 @@ module Asm
   # Perform the given operation, on the stack's topmost SINGLE value.
   # Replace the value with the result.
   def self.unary_op(type)
-    [write_comment(:arithmetic, type),
+    [comment(:arithmetic, type),
      decrementSP,                       # 
      "A=M",                             # prepare to examine operand 
      do_unary_op_and_push(type.to_sym), # perform op and replace stack top 
@@ -288,104 +281,119 @@ module Asm
   def self.function_code(classname, functionname, numlocals) 
     puts "#{classname} #{functionname} #{numlocals}"
     asm = []
-    asm << [write_comment(:function, "entry point")]
+    asm << [comment(:function, "entry point")]
     asm << ["(#{classname}.#{functionname})"] 
-    asm << [write_comment(:function, "init locals")]
+    asm << [comment(:function, "init locals")]
     asm << ["D=0", "@LCL", "A=M"]
     0.upto(numlocals.to_i-1) { 
       asm << [push_D_register_to_stack]
     }
-    asm << [write_comment(:function, "finished init locals")] 
+    asm << [comment(:function, "finished init locals")] 
     asm.flatten
   end
 
   def self.function_return
-    asm = []
     # FRAME = LCL - save FRAME in a temporary variable
-    asm << [write_comment(:function, "save FRAME to a temp")] 
-    asm << ["@LCL", "D=M", "@R13", "M=D"] 
-    asm << [write_comment(:function, "save return addr to a temp")] 
-    # RET = *(FRAME-5) - store return address in a temp var
-    asm << ["@R13", "D=M", "@5", "A=D-A", "D=M", "@RET", "M=D"]   
-    asm << [write_comment(:function, "put return value into *ARG")] 
-    # *(ARG) = pop() - reposition the return value for the caller
-    asm << [pop_stack_top_to_D_register, "@ARG", "A=M", "M=D"]  
-    # SP = (ARG + 1)
-    asm << [write_comment(:function, "set SP to ARG+1")] 
-    asm << ["@ARG", "D=M", "D=D+1", "@SP", "M=D"]   
+    write_("save FRAME to a temp", :COMMENT] 
+    ["@LCL", "D=M", "@R13", "M=D"] 
+    write_("RET = *(FRAME)", :COMMENT) 
+    write_("@R13", "D=M", "@5", "A=D-A", "D=M", "@RET", "M=D")   
+    write_("*(ARG) = pop() - reposition the return value") 
+    write_(pop_stack_top_to_D_register, "@ARG", "A=M", "M=D")  
+    write_("set SP to ARG+1") 
+    write_("@ARG", "D=M", "D=D+1", "@SP", "M=D")   
     # THAT = *(FRAME - 1)
-    asm << [write_comment(:function, "set THAT to one above FRAME (LCL)")] 
+    asm << [comment(:function, "set THAT to one above FRAME (LCL)")] 
     asm << ["@R13", "D=M", "@1", "A=D-A", "D=M", "@THAT", "M=D"]      
     # THIS = *(FRAME - 2)
-    asm << [write_comment(:function, "set THIS to 2 above FRAME (LCL)")] 
+    asm << [comment(:function, "set THIS to 2 above FRAME (LCL)")] 
     asm << ["@R13", "D=M", "@2", "A=D-A", "D=M", "@THIS", "M=D"]      
     # ARG = *(FRAME - 3)
-    asm << [write_comment(:function, "set ARG to 3 above FRAME (LCL)")] 
+    asm << [comment(:function, "set ARG to 3 above FRAME (LCL)")] 
     asm << ["@R13", "D=M", "@3", "A=D-A", "D=M", "@ARG", "M=D"]      
     # LCL = *(FRAME - 4)
-    asm << [write_comment(:function, "set LCL to 4 above FRAME (LCL)")] 
+    asm << [comment(:function, "set LCL to 4 above FRAME (LCL)")] 
     asm << ["@R13", "D=M", "@4", "A=D-A", "D=M", "@LCL", "M=D"]      
     # goto RET - go to return addr in caller's code
-    asm << [write_comment(:function, "set JUMP to return address ")] 
+    asm << [comment(:function, "set JUMP to return address ")] 
     asm << ["@RET", "A=M", "0; JMP"]   
     asm.flatten
   end 
 
-  def self.push_argument(n)
+  def self.asm_for_push_argument_(n)
     [read_from_segment_and_store_in_D_register("argument", n),
      push_D_register_to_stack]
   end
 
-  def self.push_base_address(segment)
-     ["@#{@@segment2mnemonic[segment]}", "D=M",
-      push_D_register_to_stack].flatten   
+  def self.asm_for_push_base_address_(segment)
+     ["@#{@@segment2mnemonic[segment]}",
+      "D=M",
+      push_D_register_to_stack]
   end
 
-  def self.reposition_ARG(nArgs)
-    asm = []
-    asm << ["@5", "D=A", "@nArgs", "D=D+A", "@R14", "M=D"]   
-    asm << ["@ARG", "M=M-D"]  
-    asm.flatten
+  def self.write_asm_for_repositioning_ARG(nArgs)
+    write_("reposition ARG", :COMMENT) 
+    write_(["@5", "D=A", "@nArgs", "D=D+A", "@R14", "M=D"])   
+    write_(["@ARG", "M=M-D"])  
   end
 
-  def self.reposition_LCL
-    ["@SP", "D=M", "@LCL", "M=D"]   
+  def self.write_asm_for_repositioning_LCL
+    write_("reposition LCL", :COMMENT) 
+    write_(["@SP", "D=M", "@LCL", "M=D"])   
   end
 
-  def self.jump_to_func(classname, funcname)
-    ["@#{classname}.#{funcname}", "0; JMP"]
+  def self.write_asm_for_jump_to_func(funcname)
+    write_("jump to #{funcname}", :COMMENT) 
+    write_(["@#{funcname}", "0; JMP"])
   end
 
-  def self.function_call(classname, funcname, nArgs)
-    asm = []
-     
-    # push nArgs to the stack
-    asm << [write_comment(:function, "push nArgs (#{nArgs})")]
-    0.upto(nArgs.to_i-1) { |n| asm << [push_argument(n)] }
+  def asm_for_push_return_address_(addr)
+     ["@#{addr}",
+     "D=M",
+     push_D_register_to_stack]
+  end
 
-    return_addr = "RETURN#{get_new_return_label}"
+  def self.write_asm_for_stack_frame_(returnaddr)
+    write_("save stack frame", :COMMENT) 
+    write_("save return address", :COMMENT) 
+    write_(asm_for_push_return_address_(returnaddr))
+    write_("save LCL", :COMMENT) 
+    write_(asm_for_push_base_address_("LCL"))
+    write_("save ARG", :COMMENT) 
+    write_(asm_for_push_base_address_("ARG"))
+    write_("save THIS", :COMMENT) 
+    write_(asm_for_push_base_address_("THIS"))
+    write_("save THAT", :COMMENT) 
+    write_(asm_for_push_base_address_("THAT"))
+  end
 
-    # Push return address to the stack (stored in a named variable)
-    asm << [write_comment(:function, "push return address (#{return_addr})")]
-    asm << ["@#{return_addr}", "D=M", push_D_register_to_stack]
-    asm << [write_comment(:function, "push LCL")]
-    asm << [push_base_address("local")]
-    asm << [write_comment(:function, "push ARG")]
-    asm << [push_base_address("argument")]
-    asm << [write_comment(:function, "push THIS")]
-    asm << [push_base_address("this")]
-    asm << [write_comment(:function, "push THAT")]
-    asm << [push_base_address("that")]
-    asm << [write_comment(:function, "reposition ARG")]
-    #ARG = SP-n-5
-    asm << [reposition_ARG(nArgs)]
-    # LCL = SP
-    asm << [reposition_LCL]
-    # goto f
-    asm << [jump_to_func(classname, funcname)]
-    # declare a label for the return address 
-    asm << ["(#{return_addr})"]
-    asm.flatten
+  def self.write_asm_for_push_nargs_(nArgs)
+    write_("push nArgs #{nArgs}", :COMMENT) 
+    0.upto(nArgs.to_i-1) {|n|
+      write_(push_argument(n))
+    }
+  end
+
+  def self.function_call(funcname, nArgs)
+    # push nArguments to the stack 
+    write_asm_for_push_nargs_(nArgs))
+
+    # save the stack frame, for restoring state later 
+    return_addr = "RETURN#{next_return_label}"
+    write_asm_for_stack_frame_(return_addr))
+
+    # prepare ARG and LCL base addresses  
+    write_asm_for_repositioning_ARG(nArgs)
+    write_asm_for_repositioning_LCL
+  
+    # jump to the function
+    write_asm_for_jump_to_func(funcname)
+    
+    # we are handling the "call f" vm command,
+    # so the asm command after this sequence is where we 
+    # want to return. 
+    # So label it, in the asm.
+    write_("#{return_addr}", :LABEL)
   end
 
 end
