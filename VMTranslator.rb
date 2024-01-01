@@ -14,6 +14,7 @@ class Parser
     @filename = stream 
     @writer = writer
     @writer.set_file_name(stream)
+    puts "writing bootstrap!"
     @writer.write_bootstrap
   end
 
@@ -22,7 +23,7 @@ class Parser
     @data = File.open(fname)
     until has_more_commands == false do 
       advance
-      puts "command type #{command_type}"
+      #puts "command type #{command_type}"
       case command_type
       when :C_ARITHMETIC 
         @writer.write_arithmetic(@arg1)
@@ -126,3 +127,4 @@ else
   puts "creating new parser for #{stream}"
   parser.run("#{stream}")
 end
+

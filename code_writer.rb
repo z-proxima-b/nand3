@@ -20,70 +20,77 @@ class CodeWriter
     Asm.set_file_name(@outfile)
 
     # Ensure that the output file does not already exist
-    File.delete @outfile if File.exists? @outfile
+    if File.exists? @outfile
+      puts "#{@outfile} exists, so deleting"
+    else
+      puts "#{@outfile} does not exist."
+    end
   end
 
   # Given a vm asm.arithmetic command, write the corresponding
   # assembler instructions to the output file.
   def write_arithmetic(cmd)
     asm = case cmd 
-          when "add", "sub", "eq", "gt", "lt", 
-               "or",  "and" 
-            Asm.binary_op(cmd)
-          when "neg", "not"
-            Asm.unary_op(cmd)
-          else
-            raise ArgumentError, "Unknown arithmetic command #{cmd}." 
-          end
-    asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
+      when "add", "sub", "eq", "gt", "lt", 
+           "or",  "and" 
+        Asm.binary_op(cmd)
+      when "neg", "not"
+        Asm.unary_op(cmd)
+      else
+        raise ArgumentError, "Unknown arithmetic command #{cmd}." 
+    end
+    asm.flatten.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
 
   end
 
   # Given a vm stack operation, write the corresponding assembler instructions
   # to perform the push or pop operation.
   def write_pushpop(command, segment, value)
-    asm = case command
+     asm = case command
           when :C_PUSH then Asm.push(segment, value)
           when :C_POP then Asm.pop(segment, value)
           else raise ArgumentError, "Unknown stack operation."
           end
-    asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
+    asm.flatten.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
   end
 
   def write_label(name)
     asm = Asm.label(name) 
-    asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
+    asm.flatten.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
   end
 
   def write_if_goto(name)
     asm = Asm.if_goto(name) 
-    asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
+    asm.flatten.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
   end
 
   def write_goto(name)
     asm = Asm.goto(name) 
-    asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
+    asm.flatten.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
   end
 
-  def write_function_call(classname, functionname, nArgs)
-    asm = Asm.function_call(classname, functionname, nArgs) 
-    asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
+  def write_function_call(scope, func, nArgs)
+    asm = Asm.function_call("#{scope}.#{func}", nArgs) 
+    asm.flatten.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
   end
 
-  def write_function_code(classname, functionname, numlocals)
-    asm = Asm.function_code(classname, functionname, numlocals) 
-    asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
+  def write_function_code(scope, func, numlocals)
+    asm = Asm.function_code("#{scope}.#{func}", numlocals) 
+    asm.flatten.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
   end
 
   def write_return
     asm = Asm.function_return
-    asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
+    asm.flatten.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
   end
 
   def write_bootstrap
     asm = Asm.bootstrap
-    asm.each {|a| File.write(@outfile, "#{a}\n", mode: "a")}
+    puts "empty bootstrap" if asm.empty?
+    puts "size: #{asm.length}" 
+    asm.each {|a|
+      puts "writing #{a}"
+      File.write(@outfile, "#{a}\n", mode: "a")}
   end
-
 end
 
