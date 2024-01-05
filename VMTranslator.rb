@@ -119,25 +119,23 @@ puts "The first arg = #{stream}"
 directoryname = ""
 outfilename = ""
 to_parse = []
-need_bootstrap = false
 
 ########################################################################
 if File.directory?(stream)
   directoryname = stream
   to_parse = Dir.glob("*.vm", base: "#{stream}") 
-  need_bootstrap = true 
 else
   directoryname = File.dirname stream
   to_parse = [File.basename(stream)] 
-  need_bootstrap = false 
 end
 
 puts "directory = #{directoryname}"
 puts "filename = #{File.basename(directoryname)}"
 outfilename = "#{directoryname}//#{File.basename(directoryname)}.asm" 
 
+need_bootstrap = to_parse.length>1
 code_writer = CodeWriter.new(outfilename, need_bootstrap)
 parser = Parser.new(code_writer)
-puts "Files to PARSE: #{to_parse}"
+puts "need bootstrap? #{need_bootstrap}"
 to_parse.each {|f| parser.run("#{directoryname}//#{f}") }
 

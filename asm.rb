@@ -60,7 +60,6 @@ module Asm
 
     format_(instr)
     
-    
   end
 
 
@@ -75,7 +74,9 @@ module Asm
     instr << comment_("pop #{seg} #{offs}")
     tempvar = "R13"
     instr << calculate_seg_addr_and_store_in_temp_var(seg, offs, tempvar)
-   
+    instr << pop_stack_top_to_D_register
+    instr << ["@#{tempvar}", "A=M", "M=D"] 
+
     format_(instr)
     
   end
@@ -89,7 +90,7 @@ module Asm
     instr << comment_("if-goto")
     instr << [pop_stack_top_to_D_register,
               "@#{name}",
-              "D; JGT"]
+              "D; JNE"]
     format_(instr)
   end
 
@@ -351,8 +352,8 @@ module Asm
       ["@#{@@scope}.#{offs}"]
     else
       [store_constant_in_D_register(offs),
-       store_base_address_in_A_register(seg), 
-       "A=A+D"]
+       "@#{@@segment2mnemonic[seg]}",
+       "A=M+D"]
     end
   end
 
