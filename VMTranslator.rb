@@ -10,17 +10,16 @@ class Parser
   @arg2
   @arg3
 
-  def initialize(stream, writer)  
-    @filename = stream 
+  def initialize(writer)  
     @writer = writer
-    @writer.set_file_name(stream)
-    puts "writing bootstrap!"
-    @writer.write_bootstrap
   end
 
   def run(fname)
-    puts "parser working on #{fname}"
+    puts "parser working on vm file: #{fname}"
     @data = File.open(fname)
+    
+    @writer.set_scope(File.basename(fname))
+
     until has_more_commands == false do 
       advance
       #puts "command type #{command_type}"
@@ -114,17 +113,31 @@ class Parser
       
 end
 
-code_writer = CodeWriter.new
 stream = ARGV[0]
-parser = Parser.new("#{stream}", code_writer)
+puts "The first arg = #{stream}"
+
+directoryname = ""
+outfilename = ""
+to_parse = []
+need_bootstrap = false
+
+########################################################################
 if File.directory?(stream)
-  dir = stream
-  Dir.children(dir).each do |fname| 
-    next if File.extname(fname) != ".vm"  
-    parser.run("#{dir}/#{fname}")
-  end
+  directoryname = stream
+  to_parse = Dir.glob("*.vm", base: "#{stream}") 
+  need_bootstrap = true 
 else
-  puts "creating new parser for #{stream}"
-  parser.run("#{stream}")
+  directoryname = File.dirname stream
+  to_parse = [File.basename(stream)] 
+  need_bootstrap = false 
 end
+
+puts "directory = #{directoryname}"
+puts "filename = #{File.basename(directoryname)}"
+outfilename = "#{directoryname}//#{File.basename(directoryname)}.asm" 
+
+code_writer = CodeWriter.new(outfilename, need_bootstrap)
+parser = Parser.new(code_writer)
+puts "Files to PARSE: #{to_parse}"
+to_parse.each {|f| parser.run("#{directoryname}//#{f}") }
 

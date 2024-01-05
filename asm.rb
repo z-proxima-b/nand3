@@ -7,7 +7,7 @@ module Asm
   
   @@label = 0
   @@returns = 0
-  @@fname = ""
+  @@scope = ""
 
 
   ##########################################################################
@@ -193,8 +193,8 @@ module Asm
   private
 
   
-  def self.set_file_name(name)
-    @@fname = name
+  def self.set_scope(name)
+    @@scope = name
   end
 
 
@@ -348,7 +348,7 @@ module Asm
 
   def self.calculate_seg_addr_and_store_in_A_register(seg, offs)
     if seg == "static" 
-      ["@#{@@fname}.#{offs}"]
+      ["@#{@@scope}.#{offs}"]
     else
       [store_constant_in_D_register(offs),
        store_base_address_in_A_register(seg), 
