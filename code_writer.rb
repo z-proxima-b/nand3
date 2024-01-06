@@ -66,6 +66,7 @@ class CodeWriter
 
   def write_goto(name)
     asm = Asm.goto(name) 
+    asm.flatten.each {|a| @outfile.write("#{a}\n")}
   end
 
   def write_function_call(scope, func, nArgs)

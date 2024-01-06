@@ -191,15 +191,15 @@ module Asm
     format_(instr)
   end
 
-  private
-
-  
   def self.set_scope(name)
     @@scope = name
   end
 
 
-  def self.get_new_label
+  private
+
+  
+    def self.get_new_label
     @@label = @@label.next
   end
 
@@ -334,22 +334,13 @@ module Asm
   end
 
 
-  # Return assembler instruction to set A to the base address 
-  # of a particular segment
-  def self.store_base_address_in_A_register(segment)
-    case segment 
-      when "temp"
-        "@R5"  
-      when "pointer"
-        "@THIS"
-      else
-        ["@#{@@segment2mnemonic[segment]}", "A=M"]   
-    end
-  end
-
   def self.calculate_seg_addr_and_store_in_A_register(seg, offs)
-    if seg == "static" 
+    case seg
+    when "static" 
       ["@#{@@scope}.#{offs}"]
+    when "pointer"
+      if offs == "0" then ["@THIS"] end 
+      if offs == "1" then ["@THAT"] end 
     else
       [store_constant_in_D_register(offs),
        "@#{@@segment2mnemonic[seg]}",
@@ -439,6 +430,5 @@ module Asm
     end
   end 
 
-  
 
 end
