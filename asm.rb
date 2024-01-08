@@ -213,6 +213,7 @@ module Asm
  
 
   def self.format_(instructions)
+    puts "instructions: #{instructions.flatten}"
     instructions.flatten.map { |i|
       if ((i.start_with?('/') == false) && (i.start_with?('(') == false))
         "#{i.prepend("\t")}"
@@ -324,17 +325,23 @@ module Asm
 
 
   def self.calculate_seg_addr_and_store_in_A_register(seg, offs)
+    result = []
     case seg
     when "static" 
-      ["@#{@@scope}.#{offs}"]
+      result << ["@#{@@scope}.#{offs}"]
     when "pointer"
-      if offs == "0" then ["@THIS"] end 
-      if offs == "1" then ["@THAT"] end 
+      if offs == "0" then result << ["@THIS"] end 
+      if offs == "1" then result << ["@THAT"] end 
+    when "temp"
+      ramaddr = 5+offs.to_i
+      result << ["@#{ramaddr}"]
     else
-      [store_constant_in_D_register(offs),
+      result << [store_constant_in_D_register(offs),
        "@#{@@segment2mnemonic[seg]}",
        "A=M+D"]
     end
+    puts "result = #{result}"
+    result
   end
 
 
