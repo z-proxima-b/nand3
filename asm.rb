@@ -97,7 +97,7 @@ module Asm
 
   ##########################################################################
   def self.goto(name)
-    instr = [comment_("goto"), "@#{name}","0; JEQ"]
+    instr = [comment_("goto"), jump_to_func_(name)]
     format_(instr)
   end
   
@@ -153,19 +153,17 @@ module Asm
   def self.function_call(funcname, nArgs)
     instr = []
 
-    # push nArguments to the stack 
-    instr << instr_for_push_nargs_(nArgs)
-
     # save the stack frame, for restoring state later 
-    return_addr = "RETURN#{next_return_label}"
-    instr << instr_for_stack_frame_(return_addr)
+    return_addr = "RETURNADDRESS#{next_return_label}"
+    instr << save_stack_frame_(return_addr)
 
-    # prepare ARG and LCL base addresses  
-    instr << instr_for_repositioning_ARG(nArgs)
-    instr << instr_for_repositioning_LCL
+    # adjust the ARG and LCL base addresses
+    # to prepare a new context for the about-to-be-invoked function 
+    instr << adjust_ARG_(nArgs)
+    instr << adjust_LCL_
   
     # jump to the function
-    instr << instr_for_jump_to_func(funcname)
+    instr << jump_to_func_(funcname)
     
     # we are handling the "call f" vm command,
     # so the instr command after this sequence is where we 
@@ -249,55 +247,46 @@ module Asm
      push_D_register_to_stack]
   end
 
-  def self.instr_for_push_base_address_(segment)
-     ["@#{segment}",
-      "D=M",
-      push_D_register_to_stack]
-  end
-
-  def self.instr_for_repositioning_ARG(nArgs)
+   def self.adjust_ARG_(nArgs)
     [comment_("reposition ARG"), 
-    "@5", "D=A", "@nArgs", "D=D+A", "@R14", "M=D",   
-    "@ARG", "M=M-D"]
+     "@5", "D=A", "@#{nArgs}", "D=D+A", 
+     "@SP", "D=M-D", "@ARG", "M=D"]
   end
 
-  def self.instr_for_repositioning_LCL
+  def self.adjust_LCL_
     [comment_("reposition LCL"), 
      "@SP", "D=M", "@LCL", "M=D"]   
   end
 
-  def self.instr_for_jump_to_func(funcname)
+  def self.jump_to_func_(funcname)
     [comment_("jump to #{funcname}"), 
      "@#{funcname}", "0; JEQ"]
   end
 
-  def self.instr_for_push_return_address_(addr)
+  def self.save_return_ROM_addr_(addr)
+    ["@#{addr}",
+     "D=A",
+     push_D_register_to_stack]
+  end
+
+  def self.deref_ptr_and_save_(addr)
      ["@#{addr}",
      "D=M",
      push_D_register_to_stack]
   end
 
-  def self.instr_for_stack_frame_(returnaddr)
+  def self.save_stack_frame_(returnaddr)
     [comment_("save stack frame"), 
      comment_("save return address"), 
-     instr_for_push_return_address_(returnaddr),
+     save_return_ROM_addr_(returnaddr),
      comment_("save LCL"), 
-     instr_for_push_base_address_("LCL"),
+     deref_ptr_and_save_("LCL"),
      comment_("save ARG"), 
-     instr_for_push_base_address_("ARG"),
+     deref_ptr_and_save_("ARG"),
      comment_("save THIS"), 
-     instr_for_push_base_address_("THIS"),
+     deref_ptr_and_save_("THIS"),
      comment_("save THAT"), 
-     instr_for_push_base_address_("THAT")]
-  end
-
-
-  def self.instr_for_push_nargs_(nArgs)
-    instr = [comment_("push nArgs #{nArgs}")] 
-    0.upto(nArgs.to_i-1) { |n|
-      instr << instr_for_push_argument_(n)
-    }
-    instr
+     deref_ptr_and_save_("THAT")]
   end
 
 
